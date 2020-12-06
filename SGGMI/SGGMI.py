@@ -36,9 +36,7 @@ __all__ = [
     "profile_use_special",
     # modules
     "logging",
-    "xml",
     "sjson",
-    "yaml",
     "hashlib",
     # other
     "DNE",
@@ -56,7 +54,7 @@ from getopt import getopt
 from pathlib import Path
 from shutil import copyfile, rmtree
 from datetime import datetime
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from distutils.dir_util import copy_tree
 from distutils.errors import DistutilsFileError
 
@@ -64,18 +62,20 @@ from sggmi import util
 
 ## Importer Config
 
-try:
-    import yaml  # pip: PyYAML
-except ModuleNotFoundError:
-    yaml = None
+import json
 
 ## SJSON Handling
 try:
-    import sjson  # pip: SJSON
+    import sjson
 except ModuleNotFoundError:
     sjson = None
-else:
-    from collections import OrderedDict
+    
+## DEPPTH package patching
+
+try:
+    from deppth import deppth
+except ModuleNotFoundError:
+    deppth = None
 
 # Configurable Globals
 
@@ -94,12 +94,33 @@ edited_suffix = ".hash"
 
 DNE = ()  # 'Does Not Exist' singleton
 
+## General file payloads
+
+def file_replace(base, path):
+    copyfile(path, base)
+
 ## LUA import statement adding
 
-def lua_addimport(base, path):
-    with open(base, "a") as basefile:
+def lua_import(base, path):
+    with alt_open(base, "a") as basefile:
         basefile.write('\nImport "../' + path + '"')
 
+def lua_import_top(base,path):
+    with alt_open(base,'r+') as basefile:
+        lines = basefile.readlines()     
+        lines.insert(0, "Import "+"\""+modsrel+"/"+path+"\"\n")  
+        basefile.seek(0)                 
+        basefile.writelines(lines)
+
+## Packages
+
+if deppth is not None:
+    def package_patch(base, path):
+        deppth.patch(base,path)
+
+def package_copy(base,path):
+    if os.path.exists(base):
+        copyfile(path, base)
 
 ## SJSON mapping
 
@@ -109,6 +130,8 @@ if sjson is not None:
     sjson_RESERVED_append = "_append"
     sjson_RESERVED_replace = "_replace"
     sjson_RESERVED_delete = "_delete"
+    sjson_RESERVED_key = "_key"
+    sjson_RESERVED_value = "_value"
 
     def sjson_safeget(data, key):
         if isinstance(data, list):
@@ -138,7 +161,7 @@ if sjson is not None:
 
     def sjson_read(filename):
         try:
-            return sjson.loads(open(filename).read().replace("\\", "\\\\"))
+            return sjson.loads(alt_open(filename).read())
         except sjson.ParseException as e:
             alt_print(repr(e))
             return DNE
@@ -147,40 +170,11 @@ if sjson is not None:
         if not isinstance(filename, str):
             return
         if isinstance(content, OrderedDict):
-            content = sjson.dumps(content)
+            content = sjson.dumps(content, 2)
         else:
             content = ""
-        with open(filename, "w") as f:
-            s = "{\n" + content + "}"
-
-            # Indentation styling
-            p = ""
-            S = ""
-            for c in s:
-                if c in ("{", "[") and p in ("{", "["):
-                    S += "\n"
-                if c in ("}", "]") and p in ("}", "]"):
-                    S += "\n"
-                S += c
-                if p in ("{", "[") and c not in ("{", "[", "\n"):
-                    S = S[:-1] + "\n" + S[-1]
-                if c in ("}", "]") and p not in ("}", "]", "\n"):
-                    S = S[:-1] + "\n" + S[-1]
-                p = c
-            s = S.replace(", ", "\n").split("\n")
-            i = 0
-            L = []
-            for S in s:
-                for c in S:
-                    if c in ("}", "]"):
-                        i = i - 1
-                L.append("  " * i + S)
-                for c in S:
-                    if c in ("{", "["):
-                        i = i + 1
-            s = "\n".join(L)
-
-            f.write(s)
+        with alt_open(filename, "w") as f:
+            f.write(content)
 
     def sjson_map(indata, mapdata):
         if mapdata is DNE:
@@ -286,7 +280,7 @@ def hashfile(file, out=None, modes=hashes, blocksize=65536):
     lines = []
     for mode in modes:
         hasher = hashlib.new(mode)
-        with open(file, "rb") as afile:
+        with alt_open(file, "rb") as afile:
             buf = afile.read(blocksize)
             while len(buf) > 0:
                 hasher.update(buf)
@@ -294,7 +288,7 @@ def hashfile(file, out=None, modes=hashes, blocksize=65536):
             lines.append(mode + "\t" + hasher.hexdigest())
     content = "\n".join(lines)
     if out:
-        with open(out, "w") as ofile:
+        with alt_open(out, "w") as ofile:
             ofile.write(content)
     return content
 
@@ -335,10 +329,10 @@ def alt_print(*args, **kwargs):
         return print(*args, **kwargs)
     if do_log:
         tlog = logsdir + "/" + "temp-" + logfile_prefix + thetime() + logfile_suffix
-        f = open(tlog, "w")
+        f = alt_open(tlog, "w")
         print(file=f, *args, **kwargs)
         f.close()
-        f = open(tlog, "r")
+        f = alt_open(tlog, "r")
         data = f.read()
         f.close()
         os.remove(tlog)
@@ -350,6 +344,8 @@ def alt_warn(message):
     if do_log and do_echo:
         logging.getLogger(__name__).warning(message)
 
+def alt_open(*args,**kwargs):
+    return open(*args,encoding='utf-8',**kwargs)
 
 def alt_input(*args, **kwargs):
     if do_echo:
@@ -359,10 +355,10 @@ def alt_input(*args, **kwargs):
         return kwargs.get("default", None)
     if do_log:
         tlog = logsdir + "/" + "temp-" + logfile_prefix + thetime() + logfile_suffix
-        f = open(tlog, "w")
+        f = alt_open(tlog, "w")
         print(file=f, *args)
         f.close()
-        f = open(tlog, "r")
+        f = alt_open(tlog, "r")
         data = f.read()
         f.close()
         os.remove(tlog)
@@ -497,6 +493,16 @@ def modfile_loadcommand(reldir, tokens, to, n, mode, cfg={}, **load):
                             )
                         )
 
+def modfile_payloadcheck(payload,data):
+    if modfile_startswith(data.tokens, modfile_payloads[payload][1], modfile_payloads[payload][2]):
+        if len(modfile_payloads[payload])>4:
+            if not modfile_payloads[payload][3]:
+                alt_warn(modfile_payloads[payload][4]+data.line)
+                return True
+        modfile_loadcommand(data.reldir, data.tokens[len(modfile_payloads[payload][1]) :],
+                            data.to, modfile_payloads[payload][2], payload, data.cfg, **(data.load))
+        return True
+    return False
 
 def modfile_load(filename, echo=True):
     sig = is_subfile(filename, modsdir)
@@ -504,7 +510,7 @@ def modfile_load(filename, echo=True):
         prefix = os.path.commonprefix([filename, modsdir])
         relname = filename[len(prefix) + 1 :]
         try:
-            file = open(filename, "r")
+            file = alt_open(filename, "r")
         except IOError:
             return
         if echo:
@@ -520,14 +526,14 @@ def modfile_load(filename, echo=True):
                 tokens = modfile_tokenise(line)
                 if len(tokens) == 0:
                     continue
-
-                elif modfile_startswith(tokens, KWRD_to, 0):
+                if modfile_startswith(tokens, modfile_keywords["to"], 0):
                     to = [s.replace("\\", "/") for s in tokens[1:]]
                     if len(to) == 0:
                         to = default_target
-                elif modfile_startswith(tokens, KWRD_load, 0):
-                    n = len(KWRD_load) + len(KWRD_priority)
-                    if tokens[len(KWRD_load) : n] == KWRD_priority:
+                    continue
+                if modfile_startswith(tokens, modfile_keywords["load"], 0):
+                    n = len(modfile_keywords["load"]) + len(modfile_keywords["priority"])
+                    if tokens[len(modfile_keywords["load"]) : n] == modfile_keywords["priority"]:
                         if len(tokens) > n:
                             try:
                                 p = int(tokens[n])
@@ -535,12 +541,14 @@ def modfile_load(filename, echo=True):
                                 pass
                         else:
                             p = default_priority
-                if modfile_startswith(tokens, KWRD_include, 1):
+                    continue
+                if modfile_startswith(tokens, modfile_keywords["include"], 1):
                     for s in tokens[1:]:
                         modfile_load(
                             reldir + "/" + s.replace('"', "").replace("\\", "/"), echo
                         )
-                elif modfile_startswith(tokens, KWRD_deploy, 1):
+                    continue
+                if modfile_startswith(tokens, modfile_keywords["deploy"], 1):
                     for s in tokens[1:]:
                         check = is_subfile(s, modsdir)
                         if check:
@@ -549,34 +557,18 @@ def modfile_load(filename, echo=True):
                             for f in os.scandir(s):
                                 S = f.path.replace("\\", "/")
                                 todeploy[S] = util.merge_dict(todeploy.get(S), cfg)
-
-                elif modfile_startswith(tokens, KWRD_import, 1):
-                    modfile_loadcommand(
-                        reldir,
-                        tokens[len(KWRD_import) :],
-                        to,
-                        1,
-                        "lua",
-                        cfg,
-                        priority=p,
-                    )
-                elif modfile_startswith(tokens, sggmi_xml.KEYWORD, 1):
-                    modfile_loadcommand(
-                        reldir, tokens[len(sggmi_xml.KEYWORD) :], to, 1, "xml", cfg, priority=p
-                    )
-                elif modfile_startswith(tokens, KWRD_sjson, 1):
-                    if sjson:
-                        modfile_loadcommand(
-                            reldir,
-                            tokens[len(KWRD_sjson) :],
-                            to,
-                            1,
-                            "sjson",
-                            cfg,
-                            priority=p,
-                        )
-                    else:
-                        alt_warn("SJSON module not found! Skipped command: " + line)
+                    continue
+                data = {
+                    "reldir" : reldir,
+                    "tokens" : tokens,
+                    "to" : to,
+                    "cfg" : cfg,
+                    "load" : { "priority" : p },
+                    "line" : line
+                }
+                for payload in modfile_payloads.keys():
+                    if modfile_payloadswitch(payload,data):
+                        break
 
     elif sig.message == "SubDir":
         for file in os.scandir(filename):
@@ -585,7 +577,7 @@ def modfile_load(filename, echo=True):
 
 def is_edited(base):
     if os.path.isfile(editdir + "/" + base + edited_suffix):
-        efile = open(editdir + "/" + base + edited_suffix, "r")
+        efile = alt_open(editdir + "/" + base + edited_suffix, "r")
         data = efile.read()
         efile.close()
         return data == hashfile(scopedir + "/" + base)
@@ -617,12 +609,7 @@ def make_base_edits(base, mods, echo=True):
 
     try:
         for mod in mods:
-            if mod.mode == "lua":
-                lua_addimport(scopedir + "/" + base, mod.data[0])
-            elif mod.mode == "xml":
-                sggmi_xml.merge(scopedir + "/" + base, mod.data[0])
-            elif mod.mode == "sjson":
-                sjson_merge(scopedir + "/" + base, mod.data[0])
+            modfile_payloads[mod.mode][0](scopedir + "/" + base, mod.data)
             if echo:
                 k = i + 1
                 for s in mod.src.split("\n"):
@@ -815,11 +802,11 @@ def configure_globals(condict={}, flow=True):
 
 
 def configsetup(predict={}, postdict={}):
-    condict = YML_framework
-    if yaml is not None and not cfg_overwrite:
+    condict = cfg_framework
+    if not cfg_overwrite:
         try:
-            with open(configfile) as f:
-                condict.update(yaml.load(f, Loader=yaml.FullLoader))
+            with alt_open(configfile) as f:
+                condict.update(json.load(f))
         except FileNotFoundError:
             pass
 
@@ -827,9 +814,9 @@ def configsetup(predict={}, postdict={}):
     if cfg_modify:
         util.merge_dict(condict, postdict)
 
-    if yaml is not None:
-        with open(configfile, "w") as f:
-            yaml.dump(condict, f)
+    if json is not None:
+        with alt_open(configfile, "w") as f:
+            json.dump(condict, f)
 
     if cfg_modify:
         alt_print("Config modification successful.")
@@ -843,14 +830,14 @@ def configsetup(predict={}, postdict={}):
 
 MSG_ConfigHelp = """
 Create or configure a folder profile using:
- * config file (requires PyYAML): `profiles` in '{0}'
+ * config file: `profiles` in '{0}'
 Or change the active folder profile using:
- * config file (requires PyYAML): `profile` in '{0}'
+ * config file: `profile` in '{0}'
  * terminal option: --profile
 Use and modify the special profile:
  * terminal options:
         --special
-        --special-set <profile YAML> (requires PyYAML)
+        --special-set <profile JSON>
 Override the game path temporarily:
  * terminal option: --game <path to game>
 """
@@ -903,8 +890,8 @@ MSG_CommandLineHelp = """
         temporarily use a different game directory
     -p --profile <profile name>
         use a particular folder profile
-    -S --special-set <profile YAML>
-        map YAML to the special profile (requires PyYAML)
+    -S --special-set <profile JSON>
+        map JSON to the special profile
         
 """
 
@@ -918,17 +905,27 @@ modfile_comment = "::"
 modfile_linebreak = ";"
 modfile_delimiter = ","
 
-KWRD_to = ["To"]
-KWRD_load = ["Load"]
-KWRD_priority = ["Priority"]
-KWRD_include = ["Include"]
-KWRD_deploy = ["Deploy"]
-KWRD_import = ["Import"]
-KWRD_sjson = ["SJSON"]
+modfile_keywords = {
+    "to"            : ("To",),
+    "load"          : ("Load",),
+    "priority"      : ("Priority",),
+    "include"       : ("Include",),
+    "deploy"        : ("Deploy",)
+}
+
+modfile_payloads = OrderedDict()
+
+modfile_payloads["replace"]         = (lambda s,d: file_replace(s,d[0]),("Replace",),1)
+modfile_payloads["package_copy"]    = (lambda s,d: package_copy(s,d[0]),("Package","Copy"),1)
+modfile_payloads["package_patch"]   = (lambda s,d: package_patch(s,d[0]),("Package","Patch"),1)
+modfile_payloads["import"]          = (lambda s,d: lua_import(s,d[0]),("Import",),1)
+modfile_payloads["import_top"]      = (lambda s,d: lua_import_top(s,d[0]),("Top","Import"),1)
+modfile_payloads["sjson"]           = (lambda s,d: sjson_merge(s,d[0]),("SJSON",),1,sjson,"SJSON")
+modfile_payloads["xml"]             = (lambda s,d: sggmi_xml.merge(s,d[0]),sggmi_xml.KEYWORD,1)
 
 scope = "Content"
 importscope = "Scripts"
-localsources = {"sggmodimp.py", "sjson.py", "cli", "yaml"}
+localsources = {"SGGMI"}
 
 profile_template = {
     "default_target": None,
@@ -955,7 +952,7 @@ default_profiles = {
 for k, v in default_profiles.items():
     default_profiles[k] = util.merge_dict(profile_template.copy(), v, modify_original=False)
 
-YML_framework = {
+cfg_framework = {
     "echo": True,
     "input": True,
     "log": True,
@@ -1075,8 +1072,6 @@ def main(*args, **kwargs):
             return
         elif k in {"-m", "--modify"}:
             cfg_modify = True
-            if yaml is None:
-                alt_warn("PyYAML module not found! Config cannot be written.")
         elif k in {"-o", "--overwrite"}:
             cfg_overwrite = True
         elif k in {"-s", "--special"}:
@@ -1096,11 +1091,8 @@ def main(*args, **kwargs):
         elif k in {"-p", "--profile"}:
             postdict["hashes"] = v.split(" ")
         elif k in {"-S", "--special-set"}:
-            if yaml is not None:
-                predict.setdefault("profile_special", {})
-                predict["profile_special"] = yaml.load(v, Loader=yaml.FullLoader)
-            else:
-                alt_warn("PyYAML module not found! cannot parse command.")
+            predict.setdefault("profile_special", {})
+            predict["profile_special"] = json.loads(v)
 
     main_action(*args, predict=predict, postdict=postdict)
 
