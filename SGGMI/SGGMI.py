@@ -917,10 +917,10 @@ modfile_payloads = OrderedDict()
 
 modfile_payloads["replace"]         = (lambda s,d: file_replace(s,d[0]),("Replace",),1)
 modfile_payloads["package_copy"]    = (lambda s,d: package_copy(s,d[0]),("Package","Copy"),1)
-modfile_payloads["package_patch"]   = (lambda s,d: package_patch(s,d[0]),("Package","Patch"),1)
+modfile_payloads["package_patch"]   = (lambda s,d: package_patch(s,d[0]),("Package","Patch"),1,deppth,"DEPPTH module not found! Skipped command: ")
 modfile_payloads["import"]          = (lambda s,d: lua_import(s,d[0]),("Import",),1)
 modfile_payloads["import_top"]      = (lambda s,d: lua_import_top(s,d[0]),("Top","Import"),1)
-modfile_payloads["sjson"]           = (lambda s,d: sjson_merge(s,d[0]),("SJSON",),1,sjson,"SJSON")
+modfile_payloads["sjson"]           = (lambda s,d: sjson_merge(s,d[0]),("SJSON",),1,sjson,"SJSON module not found! Skipped command: ")
 modfile_payloads["xml"]             = (lambda s,d: sggmi_xml.merge(s,d[0]),sggmi_xml.KEYWORD,1)
 
 scope = "Content"
