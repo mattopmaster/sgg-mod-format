@@ -1,17 +1,17 @@
-#Proposal of a new format for modular mods#
+# Proposal of a new format for modular mods
 
 ======
-##Why?##
+## Why?
 
 There are a few reasons to change the mod format going forward:
 --+ with the current format it's not possible to make a mod that has independent modules that can be toggled on an off from the user
 --+ the current format for sjson changes is convoluted, hard to read and not concise
 --+ the current format has little room for extensions for future updates
 ======
-##Proposal##
+## Proposal
 
 ------
-###Modfile###
+### Modfile
 
 The current _modfile.txt_ is changed to _modfile.sjson_, and has a fixed structure, as described below
 Simple imports would be changed from:
@@ -73,7 +73,7 @@ A new property **IfConfig** is introduced, which makes the rule conditional on t
 }
 ```
 ------
-###Config###
+### Config
 
 A new optional file is added in the root folder of the mod, which must be named _config.sjson_. Its structure would be:
 ```
@@ -86,7 +86,7 @@ A new optional file is added in the root folder of the mod, which must be named 
 The values in this file allow to enable/disable modules of the mod.
 If the file is parsed incorrectly or is missing, and a rule with the **IfConfig** property is present, the value defaults to `true`, and a warning is displayed on the console
 ------
-###SJSON###
+### SJSON
 
 The current structure is scrapped entirely, to allow a more readable and concise structure to be used.
 The new structure would consist in rules that have 4 properties: **TreePath**, **Mode**, **Value** and **Key**.
