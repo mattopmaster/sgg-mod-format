@@ -1,5 +1,4 @@
 # Proposal of a new format for modular mods
-
 ======
 ## Why?
 
