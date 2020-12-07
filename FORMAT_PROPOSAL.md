@@ -1,5 +1,5 @@
 # Proposal of a new format for modular mods
-======
+------
 ## Why?
 
 There are a few reasons to change the mod format going forward:
@@ -8,7 +8,6 @@ There are a few reasons to change the mod format going forward:
 * the current format has little room for extensions for future updates
 ======
 ## Proposal
-
 ------
 ### Modfile
 
