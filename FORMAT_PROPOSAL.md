@@ -18,6 +18,7 @@ There are a few reasons to change the mod format going forward:
 ### Modfile
 
 The current _modfile.txt_ is changed to _modfile.sjson_, and has a fixed structure, as described below
+
 Simple imports would be changed from:
 ```
 Import "foo.lua"
@@ -97,11 +98,17 @@ If the file is parsed incorrectly or is missing, and a rule with the **IfConfig*
 ### SJSON
 
 The current structure is scrapped entirely, to allow a more readable and concise structure to be used.
+
 The new structure would consist in rules that have 4 properties: **TreePath**, **Mode**, **Value** and **Key**.
+
 **TreePath** has value equal to the path taken in the tree representation of the target sjson to reach the desired node, inclusive. Each node present in the path is separated with `::`
+
 A value equal to `::` refers to the root of the tree (the entire target).
+
 **Mode** is a value between `Delete`, `Update` and `Append`
+
 **Value** is the value used when in mode `Update` or `Append` and defines the value to be used when doing said operation
+
 **Key** is the value used when in mode `Append`. This property is ignored when doing an append operation on an element that has sequential index key
 ```
 {
