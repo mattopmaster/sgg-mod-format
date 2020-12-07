@@ -4,9 +4,9 @@
 ## Why?
 
 There are a few reasons to change the mod format going forward:
---+ with the current format it's not possible to make a mod that has independent modules that can be toggled on an off from the user
---+ the current format for sjson changes is convoluted, hard to read and not concise
---+ the current format has little room for extensions for future updates
+* with the current format it's not possible to make a mod that has independent modules that can be toggled on an off from the user
+* the current format for sjson changes is convoluted, hard to read and not concise
+* the current format has little room for extensions for future updates
 ======
 ## Proposal
 
